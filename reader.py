@@ -1,8 +1,9 @@
 import csv
 import re
-
 from models.CsvData import CsvData
 import os
+from typing import List
+from openpyxl import load_workbook
 import pandas as pd
 from datetime import datetime
 
@@ -44,19 +45,39 @@ def read_csv_to_dataclass_list(csv_file_path, encoding='utf-8'):
     return data_objects
 
 
+def save_data_to_sheet(file_path, sheet_name: str, list_of_data: List[CsvData]):
+    book = load_workbook(file_path)
+    if sheet_name in book.sheetnames:
+        sheet = book[sheet_name]
+        book.remove(sheet)
+        book.save(file_path)
+
+        df = pd.DataFrame([ob.__dict__ for ob in list_of_data])
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='new') as writer:
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+    else:
+        raise Exception(f"=== my Exception === No {sheet_name} in Excel file.")
 
 
-
-
-def save_list_of_unique_csv_data(list_of_unique_csv_data):
-    df = pd.DataFrame([ob.__dict__ for ob in list_of_unique_csv_data])
+def save_list_of_unique_csv_data(list_of_unique_csv_data: List[CsvData]):
     actual_date = datetime.now().strftime('%Y.%m.%d')
     excel_file_path = f"priv-data/excel-bank-{actual_date}.xlsx"
-    df.to_excel(excel_file_path, index=False)
 
+    try:
+        save_data_to_sheet(excel_file_path, 'all_data', list_of_unique_csv_data)
 
-    filtr = lambda obiekt: obiekt.my_category == 'savings'
-    filtr_lista = list(filter(filtr, list_of_unique_csv_data))
-    df = pd.DataFrame([ob.__dict__ for ob in filtr_lista])
-    with pd.ExcelWriter(excel_file_path, engine='openpyxl', mode='a') as writer:
-        df.to_excel(writer, sheet_name='savings', index=False)
+        filtr = lambda obiekt: obiekt.my_category == 'savings'
+        list_of_savings = list(filter(filtr, list_of_unique_csv_data))
+        for elem in list_of_savings:
+            elem.Kwota_operacji = abs(elem.Kwota_operacji)
+        save_data_to_sheet(excel_file_path, 'savings', list_of_savings)
+
+        filtr = lambda obiekt: obiekt.my_category == 'income'
+        list_of_savings = list(filter(filtr, list_of_unique_csv_data))
+        save_data_to_sheet(excel_file_path, 'income', list_of_savings)
+
+        filtr = lambda obiekt: obiekt.my_category == 'expense'
+        list_of_savings = list(filter(filtr, list_of_unique_csv_data))
+        save_data_to_sheet(excel_file_path, 'expense', list_of_savings)
+    except FileNotFoundError:
+        raise Exception(f"=== my Exception === No {excel_file_path} Excel file.")
